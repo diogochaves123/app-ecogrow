@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EcoGrow - Cuidado Inteligente de Plantas",
-  description: "Aplicativo sustentável e inteligente para cuidar de suas plantas com IA, gamificação e comunidade",
+  title: "Criado com a Lasy",
+  description: "Projeto criado com Lasy AI",
 };
 
 export default function RootLayout({
@@ -32,7 +32,7 @@ export default function RootLayout({
         <Script src="/lasy-bridge.js" strategy="beforeInteractive" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gradient-to-br from-emerald-50 via-green-50 to-lime-50`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
       </body>

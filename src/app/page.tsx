@@ -1,39 +1,141 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Sprout, Leaf, Calendar, MessageCircle, Users, Trophy, Plus, Search, Bell, Settings, Menu, X } from 'lucide-react'
+import { Sprout, Leaf, Calendar, MessageCircle, Users, Trophy, Plus, Search, Bell, Settings, Menu, X, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
+import { supabase } from '@/lib/supabase'
+import { getCurrentUser, getUserProfile, signOut } from '@/lib/auth'
+import { useRouter } from 'next/navigation'
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('home')
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [plants, setPlants] = useState<any[]>([])
+  const [tasks, setTasks] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
-  // Mock data - será substituído por dados reais do Supabase
+  useEffect(() => {
+    loadUserData()
+  }, [])
+
+  async function loadUserData() {
+    try {
+      const currentUser = await getCurrentUser()
+      
+      if (!currentUser) {
+        router.push('/onboarding')
+        return
+      }
+
+      setUser(currentUser)
+
+      // Carregar perfil
+      const userProfile = await getUserProfile(currentUser.id)
+      setProfile(userProfile)
+
+      // Carregar plantas
+      const { data: plantsData } = await supabase
+        .from('plants')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .limit(6)
+
+      setPlants(plantsData || [])
+
+      // Carregar tarefas
+      const { data: tasksData } = await supabase
+        .from('care_tasks')
+        .select('*, plants(name)')
+        .eq('user_id', currentUser.id)
+        .eq('completed', false)
+        .order('due_date', { ascending: true })
+        .limit(5)
+
+      setTasks(tasksData || [])
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSignOut() {
+    try {
+      await signOut()
+      router.push('/onboarding')
+      router.refresh()
+    } catch (error) {
+      console.error('Erro ao sair:', error)
+    }
+  }
+
   const userStats = {
-    name: 'Visitante',
-    plants: 0,
-    coins: 0,
-    points: 0,
-    level: 1,
+    name: profile?.full_name || user?.email?.split('@')[0] || 'Usuário',
+    plants: plants.length,
+    coins: profile?.coins || 0,
+    points: profile?.points || 0,
+    level: Math.floor((profile?.points || 0) / 100) + 1,
     streak: 0
   }
 
-  const upcomingTasks = [
-    { id: 1, plant: 'Manjericão', task: 'Regar', time: 'Hoje, 14:00', icon: '💧' },
-    { id: 2, plant: 'Roseira', task: 'Podar', time: 'Amanhã, 09:00', icon: '✂️' },
-    { id: 3, plant: 'Tomate', task: 'Adubar', time: 'Em 2 dias', icon: '🌱' },
-  ]
+  const getTaskIcon = (taskType: string) => {
+    switch (taskType) {
+      case 'water': return '💧'
+      case 'prune': return '✂️'
+      case 'fertilize': return '🌱'
+      case 'pest_control': return '🐛'
+      case 'harvest': return '🌾'
+      default: return '📋'
+    }
+  }
 
-  const recentPlants = [
-    { id: 1, name: 'Manjericão', type: 'Erva', health: 'excellent', image: '🌿' },
-    { id: 2, name: 'Roseira', type: 'Flor', health: 'good', image: '🌹' },
-    { id: 3, name: 'Tomate', type: 'Hortaliça', health: 'good', image: '🍅' },
-  ]
+  const getHealthBadge = (health: string) => {
+    switch (health) {
+      case 'excellent':
+        return { label: 'Excelente', className: 'bg-emerald-100 text-emerald-700 border-emerald-300' }
+      case 'good':
+        return { label: 'Boa', className: 'bg-green-100 text-green-700 border-green-300' }
+      case 'fair':
+        return { label: 'Regular', className: 'bg-yellow-100 text-yellow-700 border-yellow-300' }
+      case 'poor':
+        return { label: 'Ruim', className: 'bg-red-100 text-red-700 border-red-300' }
+      default:
+        return { label: 'Boa', className: 'bg-green-100 text-green-700 border-green-300' }
+    }
+  }
+
+  const formatDueDate = (dueDate: string) => {
+    const date = new Date(dueDate)
+    const now = new Date()
+    const diffTime = date.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 0) return 'Hoje'
+    if (diffDays === 1) return 'Amanhã'
+    if (diffDays === -1) return 'Ontem'
+    if (diffDays < 0) return `${Math.abs(diffDays)} dias atrás`
+    return `Em ${diffDays} dias`
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Sprout className="w-12 h-12 text-emerald-600 animate-pulse mx-auto mb-4" />
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -75,15 +177,20 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" className="relative hidden sm:flex">
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                {tasks.length > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                )}
               </Button>
               <Button variant="ghost" size="icon" className="hidden sm:flex">
                 <Settings className="w-5 h-5" />
               </Button>
+              <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sair">
+                <LogOut className="w-5 h-5" />
+              </Button>
               <Avatar className="w-9 h-9 cursor-pointer border-2 border-emerald-500">
-                <AvatarImage src="" />
+                <AvatarImage src={profile?.avatar_url || ''} />
                 <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-green-600 text-white">
-                  V
+                  {userStats.name.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <Button
@@ -157,8 +264,8 @@ export default function Home() {
           </Card>
           <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50">
             <CardHeader className="pb-3">
-              <CardDescription className="text-blue-700">Sequência</CardDescription>
-              <CardTitle className="text-3xl text-blue-900">{userStats.streak} dias</CardTitle>
+              <CardDescription className="text-blue-700">Nível</CardDescription>
+              <CardTitle className="text-3xl text-blue-900">{userStats.level}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -167,7 +274,10 @@ export default function Home() {
         <div className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Ações Rápidas</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Button className="h-auto py-6 flex-col gap-2 bg-gradient-to-br from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700">
+            <Button 
+              className="h-auto py-6 flex-col gap-2 bg-gradient-to-br from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700"
+              onClick={() => router.push('/first-plant')}
+            >
               <Plus className="w-6 h-6" />
               <span className="text-sm">Adicionar Planta</span>
             </Button>
@@ -200,23 +310,23 @@ export default function Home() {
                 <CardDescription>Cuidados agendados para suas plantas</CardDescription>
               </CardHeader>
               <CardContent>
-                {upcomingTasks.length > 0 ? (
+                {tasks.length > 0 ? (
                   <div className="space-y-3">
-                    {upcomingTasks.map((task) => (
+                    {tasks.map((task) => (
                       <div
                         key={task.id}
                         className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all cursor-pointer"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="text-2xl">{task.icon}</div>
+                          <div className="text-2xl">{getTaskIcon(task.task_type)}</div>
                           <div>
-                            <p className="font-medium text-gray-900">{task.plant}</p>
-                            <p className="text-sm text-gray-600">{task.task}</p>
+                            <p className="font-medium text-gray-900">{task.plants?.name || 'Planta'}</p>
+                            <p className="text-sm text-gray-600">{task.title}</p>
                           </div>
                         </div>
                         <div className="text-right">
                           <Badge variant="outline" className="text-xs">
-                            {task.time}
+                            {formatDueDate(task.due_date)}
                           </Badge>
                         </div>
                       </div>
@@ -242,37 +352,38 @@ export default function Home() {
                 <CardDescription>Acompanhe a saúde do seu jardim</CardDescription>
               </CardHeader>
               <CardContent>
-                {recentPlants.length > 0 ? (
+                {plants.length > 0 ? (
                   <div className="grid sm:grid-cols-2 gap-4">
-                    {recentPlants.map((plant) => (
-                      <div
-                        key={plant.id}
-                        className="p-4 rounded-lg border border-gray-200 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="text-4xl">{plant.image}</div>
-                          <Badge
-                            variant="outline"
-                            className={
-                              plant.health === 'excellent'
-                                ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                                : 'bg-green-100 text-green-700 border-green-300'
-                            }
-                          >
-                            {plant.health === 'excellent' ? 'Excelente' : 'Boa'}
-                          </Badge>
+                    {plants.map((plant) => {
+                      const healthBadge = getHealthBadge(plant.health_status)
+                      const healthValue = plant.health_status === 'excellent' ? 100 : plant.health_status === 'good' ? 80 : plant.health_status === 'fair' ? 60 : 40
+                      
+                      return (
+                        <div
+                          key={plant.id}
+                          className="p-4 rounded-lg border border-gray-200 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="text-4xl">🌿</div>
+                            <Badge variant="outline" className={healthBadge.className}>
+                              {healthBadge.label}
+                            </Badge>
+                          </div>
+                          <h3 className="font-semibold text-gray-900 mb-1">{plant.name}</h3>
+                          <p className="text-sm text-gray-600">{plant.type}</p>
+                          <Progress value={healthValue} className="mt-3 h-2" />
                         </div>
-                        <h3 className="font-semibold text-gray-900 mb-1">{plant.name}</h3>
-                        <p className="text-sm text-gray-600">{plant.type}</p>
-                        <Progress value={plant.health === 'excellent' ? 100 : 80} className="mt-3 h-2" />
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     <Sprout className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>Nenhuma planta cadastrada</p>
-                    <Button className="mt-4 bg-gradient-to-r from-emerald-500 to-green-600">
+                    <Button 
+                      className="mt-4 bg-gradient-to-r from-emerald-500 to-green-600"
+                      onClick={() => router.push('/first-plant')}
+                    >
                       <Plus className="w-4 h-4 mr-2" />
                       Adicionar Primeira Planta
                     </Button>
@@ -292,9 +403,9 @@ export default function Home() {
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="w-16 h-16 border-2 border-emerald-500">
-                    <AvatarImage src="" />
+                    <AvatarImage src={profile?.avatar_url || ''} />
                     <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-green-600 text-white text-xl">
-                      V
+                      {userStats.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div>
@@ -305,13 +416,20 @@ export default function Home() {
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span className="text-gray-600">Progresso</span>
-                    <span className="font-medium text-emerald-700">0%</span>
+                    <span className="font-medium text-emerald-700">
+                      {((userStats.points % 100) / 100 * 100).toFixed(0)}%
+                    </span>
                   </div>
-                  <Progress value={0} className="h-2" />
+                  <Progress value={(userStats.points % 100)} className="h-2" />
                 </div>
-                <Button className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700">
-                  Fazer Quiz Inicial
-                </Button>
+                {!profile?.quiz_completed && (
+                  <Button 
+                    className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700"
+                    onClick={() => router.push('/onboarding')}
+                  >
+                    Fazer Quiz Inicial
+                  </Button>
+                )}
               </CardContent>
             </Card>
 
