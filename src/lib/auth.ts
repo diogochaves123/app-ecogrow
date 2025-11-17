@@ -1,26 +1,48 @@
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 
 export async function getCurrentUser() {
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+  if (!isSupabaseConfigured()) {
+    return null
+  }
+  
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    return user
+  } catch (error) {
+    console.error('Error getting current user:', error)
+    return null
+  }
 }
 
 export async function getUserProfile(userId: string) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single()
+  if (!isSupabaseConfigured()) {
+    return null
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
 
-  if (error) {
+    if (error) {
+      console.error('Error fetching profile:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
     console.error('Error fetching profile:', error)
     return null
   }
-
-  return data
 }
 
 export async function signOut() {
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase not configured')
+  }
+  
   const { error } = await supabase.auth.signOut()
   if (error) {
     console.error('Error signing out:', error)
@@ -29,6 +51,10 @@ export async function signOut() {
 }
 
 export async function updateProfile(userId: string, updates: any) {
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase not configured')
+  }
+  
   const { data, error } = await supabase
     .from('profiles')
     .update(updates)
