@@ -5,12 +5,10 @@ import { Sprout, Leaf, Calendar, MessageCircle, Users, Trophy, Plus, Search, Bel
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
-import { supabase } from '@/lib/supabase'
-import { getCurrentUser, getUserProfile, signOut } from '@/lib/auth'
-import { useRouter } from 'next/navigation'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { getCurrentUser, getUserProfile } from '@/lib/auth'
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -20,7 +18,6 @@ export default function Home() {
   const [plants, setPlants] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
 
   useEffect(() => {
     loadUserData()
@@ -28,10 +25,18 @@ export default function Home() {
 
   async function loadUserData() {
     try {
+      // Verificar se Supabase está configurado
+      if (!isSupabaseConfigured()) {
+        console.log('Supabase não configurado - usando modo demo')
+        setLoading(false)
+        return
+      }
+
       const currentUser = await getCurrentUser()
       
       if (!currentUser) {
-        router.push('/onboarding')
+        console.log('Usuário não autenticado - usando modo demo')
+        setLoading(false)
         return
       }
 
@@ -42,17 +47,19 @@ export default function Home() {
       setProfile(userProfile)
 
       // Carregar plantas
-      const { data: plantsData } = await supabase
+      const { data: plantsData, error: plantsError } = await supabase
         .from('plants')
         .select('*')
         .eq('user_id', currentUser.id)
         .order('created_at', { ascending: false })
         .limit(6)
 
-      setPlants(plantsData || [])
+      if (!plantsError) {
+        setPlants(plantsData || [])
+      }
 
       // Carregar tarefas
-      const { data: tasksData } = await supabase
+      const { data: tasksData, error: tasksError } = await supabase
         .from('care_tasks')
         .select('*, plants(name)')
         .eq('user_id', currentUser.id)
@@ -60,7 +67,9 @@ export default function Home() {
         .order('due_date', { ascending: true })
         .limit(5)
 
-      setTasks(tasksData || [])
+      if (!tasksError) {
+        setTasks(tasksData || [])
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     } finally {
@@ -70,16 +79,18 @@ export default function Home() {
 
   async function handleSignOut() {
     try {
-      await signOut()
-      router.push('/onboarding')
-      router.refresh()
+      if (isSupabaseConfigured()) {
+        const { error } = await supabase.auth.signOut()
+        if (error) throw error
+      }
+      window.location.href = '/'
     } catch (error) {
       console.error('Erro ao sair:', error)
     }
   }
 
   const userStats = {
-    name: profile?.full_name || user?.email?.split('@')[0] || 'Usuário',
+    name: profile?.full_name || user?.email?.split('@')[0] || 'Jardineiro',
     plants: plants.length,
     coins: profile?.coins || 0,
     points: profile?.points || 0,
@@ -184,9 +195,11 @@ export default function Home() {
               <Button variant="ghost" size="icon" className="hidden sm:flex">
                 <Settings className="w-5 h-5" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sair">
-                <LogOut className="w-5 h-5" />
-              </Button>
+              {user && (
+                <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sair">
+                  <LogOut className="w-5 h-5" />
+                </Button>
+              )}
               <Avatar className="w-9 h-9 cursor-pointer border-2 border-emerald-500">
                 <AvatarImage src={profile?.avatar_url || ''} />
                 <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-green-600 text-white">
@@ -242,6 +255,21 @@ export default function Home() {
           </p>
         </div>
 
+        {/* Supabase Not Configured Warning */}
+        {!isSupabaseConfigured() && (
+          <Card className="mb-8 border-amber-300 bg-amber-50">
+            <CardHeader>
+              <CardTitle className="text-amber-900 flex items-center gap-2">
+                <Bell className="w-5 h-5" />
+                Configure o Supabase
+              </CardTitle>
+              <CardDescription className="text-amber-700">
+                Para usar todas as funcionalidades, conecte sua conta Supabase nas Configurações do Projeto → Integrações
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50">
@@ -276,7 +304,7 @@ export default function Home() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Button 
               className="h-auto py-6 flex-col gap-2 bg-gradient-to-br from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700"
-              onClick={() => router.push('/first-plant')}
+              onClick={() => alert('Funcionalidade disponível após configurar o Supabase')}
             >
               <Plus className="w-6 h-6" />
               <span className="text-sm">Adicionar Planta</span>
@@ -382,7 +410,7 @@ export default function Home() {
                     <p>Nenhuma planta cadastrada</p>
                     <Button 
                       className="mt-4 bg-gradient-to-r from-emerald-500 to-green-600"
-                      onClick={() => router.push('/first-plant')}
+                      onClick={() => alert('Funcionalidade disponível após configurar o Supabase')}
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       Adicionar Primeira Planta
@@ -422,14 +450,6 @@ export default function Home() {
                   </div>
                   <Progress value={(userStats.points % 100)} className="h-2" />
                 </div>
-                {!profile?.quiz_completed && (
-                  <Button 
-                    className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700"
-                    onClick={() => router.push('/onboarding')}
-                  >
-                    Fazer Quiz Inicial
-                  </Button>
-                )}
               </CardContent>
             </Card>
 

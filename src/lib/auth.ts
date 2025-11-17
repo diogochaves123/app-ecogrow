@@ -40,7 +40,7 @@ export async function getUserProfile(userId: string) {
 
 export async function signOut() {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase not configured')
+    throw new Error('Supabase não configurado')
   }
   
   const { error } = await supabase.auth.signOut()
@@ -52,7 +52,7 @@ export async function signOut() {
 
 export async function updateProfile(userId: string, updates: any) {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase not configured')
+    throw new Error('Supabase não configurado')
   }
   
   const { data, error } = await supabase
